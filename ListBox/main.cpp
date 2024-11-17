@@ -5,9 +5,9 @@
 
 CONST CHAR* g_VALUES[] = { "This", "is", "my", "first", "List", "Box" };
 
-
 BOOL CALLBACK DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 BOOL CALLBACK DlgProcAddItem(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+BOOL CALLBACK DlgProcAlterItem(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst, LPSTR lpCmdLine, INT nCmdShow)
 {
@@ -16,13 +16,10 @@ INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst, LPSTR lpCmdLine, IN
 }
 
 BOOL CALLBACK DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-
 {
 	switch (uMsg)
 	{
 	case WM_INITDIALOG:
-		break;
-	
 	{
 		HICON hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON1));
 		SendMessage(hwnd, WM_SETICON, 0, (LPARAM)hIcon);
@@ -35,9 +32,26 @@ BOOL CALLBACK DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	case WM_COMMAND:
 		switch (LOWORD(wParam))
 		{
+		case IDC_LIST:
+		{
+			//Nitifications	HIWORD(wParam)
+			//ReourseID		LOWORD(wParam)
+			if (HIWORD(wParam) == LBN_DBLCLK)//ListBoxNotification_DoubleClick
+				DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_DIALOG_ADD_ITEM), hwnd, DlgProcAlterItem, 0);
+		}
+		break;
 		case IDC_BUTTON_ADD:
 			DialogBoxParam(GetModuleHandle(NULL), MAKEINTRESOURCE(IDD_DIALOG_ADD_ITEM), hwnd, DlgProcAddItem, 0);
-				break;
+			break;
+
+		case IDC_BUTTON_REMOVE:
+		{
+			HWND hListBox = GetDlgItem(hwnd, IDC_LIST);
+			INT i = SendMessage(hListBox, LB_GETCURSEL, 0, 0);
+			SendMessage(hListBox, LB_DELETESTRING, i, 0);
+		}
+		break;
+
 		case IDOK:
 		{
 			HWND hListBox = GetDlgItem(hwnd, IDC_LIST);
@@ -47,7 +61,7 @@ BOOL CALLBACK DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			SendMessage(hListBox, LB_GETTEXT, i, (LPARAM)sz_buffer);
 
 			CHAR sz_message[SIZE]{};
-			sprintf(sz_message, "Вы выбрали элемент N%i со значением \"%s\".", i, sz_buffer);
+			sprintf(sz_message, "Вы выбрали элемент №%i со значением \"%s\".", i, sz_buffer);
 			MessageBox(hwnd, sz_message, "Info", MB_OK | MB_ICONINFORMATION);
 		}
 		break;
@@ -63,30 +77,92 @@ BOOL CALLBACK DlgProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 BOOL CALLBACK DlgProcAddItem(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	switch(uMsg)
+	switch (uMsg)
 	{
 	case WM_INITDIALOG:
+		SetFocus(GetDlgItem(hwnd, IDC_EDIT_ADD_ITEM));
 		break;
 	case WM_COMMAND:
 		switch (LOWORD(wParam))
 		{
 		case IDOK:
 		{
+			//1) Читаем текст из EditControl:
 			CONST INT SIZE = 256;
 			CHAR sz_buffer[SIZE]{};
 			HWND hEdit = GetDlgItem(hwnd, IDC_EDIT_ADD_ITEM);
 			SendMessage(hEdit, WM_GETTEXT, SIZE, (LPARAM)sz_buffer);
 
+			//2) Получаем родительское окно:
 			HWND hParent = GetParent(hwnd);
+
+			//3) Получаем дескриптор ListBox:
 			HWND hListBox = GetDlgItem(hParent, IDC_LIST);
-			SendMessage(hListBox, LB_ADDSTRING, 0, (LPARAM)sz_buffer);
+
+			//4) Добавляем текст в ListBox:
+			if (SendMessage(hListBox, LB_FINDSTRINGEXACT, -1, (LPARAM)sz_buffer) == LB_ERR)
+			{
+				SendMessage(hListBox, LB_ADDSTRING, 0, (LPARAM)sz_buffer);
+			}
+			else
+			{
+				INT answer = MessageBox
+				(
+					hwnd,
+					"Такое входение уже есть, хотите ввести что-то другое?",
+					"Question",
+					MB_YESNO | MB_ICONQUESTION
+				);
+				if (answer == IDYES)break;;
+			}
 		}
-		
 		case IDCANCEL: EndDialog(hwnd, 0); break;
 		}
 		break;
 	case WM_CLOSE:EndDialog(hwnd, 0);
-
+	}
+	return FALSE;
+}
+BOOL CALLBACK DlgProcAlterItem(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+	switch (uMsg)
+	{
+	case WM_INITDIALOG:
+	{
+		SendMessage(hwnd, WM_SETTEXT, 0, (LPARAM)"Изменить вхожение");
+		HWND hEdit = GetDlgItem(hwnd, IDC_EDIT_ADD_ITEM);
+		HWND hParent = GetParent(hwnd);
+		HWND hListBox = GetDlgItem(hParent, IDC_LIST);
+		INT i = SendMessage(hListBox, LB_GETCURSEL, 0, 0);
+		CONST INT SIZE = 256;
+		CHAR sz_buffer[SIZE]{};
+		SendMessage(hListBox, LB_GETTEXT, i, (LPARAM)sz_buffer);
+		SendMessage(hEdit, WM_SETTEXT, 0, (LPARAM)sz_buffer);
+		SetFocus(hEdit);
+		INT length = SendMessage(hEdit, WM_GETTEXTLENGTH, 0, 0);
+		SendMessage(hEdit, EM_SETSEL, length, length);
+		
+	}
+		break;
+	case WM_COMMAND:
+		switch (LOWORD(wParam))
+		{
+		case IDOK:
+		{
+			HWND hEdit = GetDlgItem(hwnd, IDC_EDIT_ADD_ITEM);
+			HWND hParent = GetParent(hwnd);
+			HWND hListBox = GetDlgItem(hParent, IDC_LIST);
+			CONST INT SIZE = 256;
+			CHAR sz_buffer[SIZE]{};
+			SendMessage(hEdit, WM_GETTEXT, SIZE, (LPARAM)sz_buffer);
+			INT i = SendMessage(hListBox, LB_GETCURSEL, 0, 0);
+			SendMessage(hListBox, LB_DELETESTRING, i, 0);
+			SendMessage(hListBox, LB_INSERTSTRING, i, (LPARAM)sz_buffer);
+		}
+		case IDCANCEL: EndDialog(hwnd, 0); break;
+		}
+		break;
+	case WM_CLOSE: EndDialog(hwnd, 0); break;
 	}
 	return FALSE;
 }
